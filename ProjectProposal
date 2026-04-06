@@ -5,14 +5,18 @@ Jared Moy (jmoy02@calpoly.edu)
 Avery Robinson (avrobins@calpoly.edu)
 Daniel Pineda (dpined04@calpoly.edu)
 
-The goal of this project is to build a relational database-driven application that moves away from static recipe
-text and toward a dynamic, interconnected "food graph." Unlike basic cookbook apps, this system treats ingredients
-as independent entities with their own attributes, allowing for advanced querying and logic. The core functionality
-focuses on a "Smart Swap" engine that uses self-referencing tables to suggest substitutions based on dietary needs
-or missing pantry items.
+The goal of this project is to create an app that uses a database to organize recipes in a smarter way. 
+Instead of just storing recipes as plain text, this app connects ingredients like a network, or a “food graph.” 
+Each ingredient is stored on its own with details about it, which makes the app more powerful than a basic cookbook.
 
-By utilizing a relational structure, the app can handle complex many-to-many relationships between recipes and
-ingredients, while also mapping flavor profiles like "umami" or "zesty" across the entire library. This setup
-ensures data integrity—meaning a change to an ingredient’s allergen status automatically updates every recipe
-it touches. For the final deliverable, the project will demonstrate how normalized database design can solve
-practical problems like automatic unit conversion and real-time recipe filtering.
+One important feature is a “Smart Swap” tool. 
+This helps suggest ingredient substitutes if someone has allergies, special diets, or is missing something in their kitchen.
+
+The app uses a database structure that can handle many recipes and ingredients at the same time, 
+since one recipe can have many ingredients and one ingredient can be used in many recipes. 
+It also tracks flavors like “umami” or “zesty” to help organize and search recipes better.
+
+Because everything is connected, the data stays accurate. 
+For example, if an ingredient is marked as an allergen, every recipe that uses it will update automatically. 
+In the end, this project shows how a well-organized database can solve real problems, 
+like converting measurements and helping users quickly find the right recipes.
