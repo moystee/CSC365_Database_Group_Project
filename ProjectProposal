@@ -5,4 +5,9 @@ Jared Moy (jmoy02@calpoly.edu)
 Avery Robinson (avrobins@calpoly.edu)
 Daniel Pineda (dpined04@calpoly.edu)
 
-The Secret Ingredient is a dynamic web application designed to move beyond static digital cookbooks by treating ingredients as intelligent entities. Instead of just listing items, the system utilizes a relational database to map complex connections between flavors, dietary restrictions, and kitchen substitutions. Users can input the ingredients they have on hand to discover recipes, or use the "Smart Swap" engine to automatically adjust a dish when an allergen or missing item is detected. By leveraging many-to-many relationships, the app can instantly recalculate measurements and suggest flavor-profile matches like "Umami" or "Zesty" across the entire database. This project transforms a simple list into a functional tool for culinary experimentation, ensuring that a missing ingredient never stops a meal. It serves as a robust demonstration of data normalization and complex querying in a practical, real-world context.
+The Secret Ingredient is a dynamic web application designed to move beyond static digital cookbooks by treating ingredients as intelligent entities.
+Instead of just listing items, the system utilizes a relational database to map complex connections between flavors, dietary restrictions, and kitchen substitutions.
+Users can input the ingredients they have on hand to discover recipes, or use the "Smart Swap" engine to automatically adjust a dish when an allergen or
+missing item is detected. By leveraging many-to-many relationships, the app can instantly recalculate measurements and suggest flavor-profile matches like
+"Umami" or "Zesty" across the entire database. This project transforms a simple list into a functional tool for culinary experimentation, ensuring that a
+missing ingredient never stops a meal. It serves as a robust demonstration of data normalization and complex querying in a practical, real-world context.
