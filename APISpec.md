@@ -1,9 +1,13 @@
 API Speculation
 
 User sign up
+
 New User - /users/create (POST)
+
 Creates a new user
+
 Request:
+
 {
   "first_name": "string",
   "email": "string"
