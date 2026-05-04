@@ -18,6 +18,11 @@ class SaveIngredientRequest(BaseModel):
     is_shared_with_household: bool = Field(default=False)
 
 
+class Ingredient(BaseModel):
+    ingredient_id: int
+    ingredient_name: str
+
+
 class SuccessResponse(BaseModel):
     success: bool
 
@@ -55,3 +60,27 @@ def save_ingredient(payload: SaveIngredientRequest) -> SuccessResponse:
         )
         conn.execute(stmt)
     return SuccessResponse(success=True)
+
+
+@router.get("/get_all_ingredients", response_model=List[Ingredient])
+def get_all_ingredients() -> List[Ingredient]:
+    """Return list of all ingredients.
+    """
+    with db.engine.begin() as conn:
+        results = conn.execute(
+                """
+                SELECT *
+                FROM ingredients
+                """
+        )
+
+        all_ingredients: list[Ingredient] = []
+        for row in results:
+            all_ingredients.append(
+                Ingredient(
+                    ingredient_id=row.ingredient_id,
+                    ingredient_name=row.name,
+                )
+            )
+
+    return all_ingredients
