@@ -149,6 +149,21 @@ Once deployed, your endpoints will be at
 `https://foodgraph-api.onrender.com` (or whatever subdomain Render assigns)
 and the interactive docs at `/docs`.
 
+### Python version
+
+Render defaults to whatever the latest available Python is, which can
+include releases too new for some dependencies' prebuilt wheels (notably
+`pydantic-core`, which builds from Rust source if no wheel matches the
+interpreter). To avoid that, this repo pins **Python 3.13.4** three ways
+so any Render detection mechanism finds it:
+
+- `PYTHON_VERSION=3.13.4` env var in `render.yaml`
+- `.python-version` file at repo root
+- `runtime.txt` with `python-3.13.4`
+
+If you ever bump dependencies, double-check that `pydantic-core` and
+`psycopg2-binary` publish wheels for the Python you target.
+
 ---
 
 ## Resetting the database
