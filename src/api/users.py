@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
-
+from typing import List
 from src import database as db
 
 router = APIRouter(prefix="/users", tags=["users"])
