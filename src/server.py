@@ -6,6 +6,8 @@ from fastapi import FastAPI
 
 from src.api import ingredients, recipes, users
 
+from typing import List
+
 app = FastAPI(
     title="Food Graph API",
     description=(
