@@ -7,7 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
-
+from typing import List
 from src import database as db
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
