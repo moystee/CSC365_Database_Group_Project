@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from typing import List
 
@@ -16,8 +16,6 @@ router = APIRouter(prefix="/ingredients", tags=["ingredients"])
 class SaveIngredientRequest(BaseModel):
     user_id: int
     ingredient_id: int
-    # Default TRUE — items are visible to housemates unless the user
-    # explicitly opts out for that ingredient.
     is_shared_with_household: bool = Field(default=True)
 
 
@@ -42,8 +40,6 @@ def save_ingredient(payload: SaveIngredientRequest) -> SuccessResponse:
         if not ingredient_exists:
             raise HTTPException(status_code=404, detail="Ingredient not found.")
 
-        # Idempotent save: re-saving the same ingredient just refreshes the
-        # is_shared_with_household flag rather than erroring.
         stmt = (
             pg_insert(db.pantry)
             .values(
@@ -57,6 +53,7 @@ def save_ingredient(payload: SaveIngredientRequest) -> SuccessResponse:
             )
         )
         conn.execute(stmt)
+
     return SuccessResponse(success=True)
 
 
@@ -67,12 +64,6 @@ class DeleteIngredientRequest(BaseModel):
 
 @router.post("/delete", response_model=SuccessResponse)
 def delete_ingredient(payload: DeleteIngredientRequest) -> SuccessResponse:
-    """Remove an ingredient from the user's pantry.
-
-    Returns 404 if the user has no such ingredient — otherwise the caller
-    can't tell whether the delete actually did anything, which makes
-    Flow 3 (David tidying his pantry) harder to reason about.
-    """
     with db.engine.begin() as conn:
         result = conn.execute(
             delete(db.pantry).where(
@@ -80,36 +71,36 @@ def delete_ingredient(payload: DeleteIngredientRequest) -> SuccessResponse:
                 db.pantry.c.ingredient_id == payload.ingredient_id,
             )
         )
+
         if result.rowcount == 0:
             raise HTTPException(
                 status_code=404,
                 detail="That ingredient is not in this user's pantry.",
             )
+
     return SuccessResponse(success=True)
+
 
 class Ingredient(BaseModel):
     ingredient_id: int
     ingredient_name: str
 
+
 @router.get("/get_all_ingredients", response_model=List[Ingredient])
 def get_all_ingredients() -> List[Ingredient]:
-    """Return list of all ingredients.
-    """
+    """Return list of all ingredients."""
     with db.engine.begin() as conn:
         results = conn.execute(
-                """
-                SELECT *
+            text("""
+                SELECT ingredient_id, name
                 FROM ingredients
-                """
+            """)
         )
 
-        all_ingredients: list[Ingredient] = []
-        for row in results:
-            all_ingredients.append(
-                Ingredient(
-                    ingredient_id=row.ingredient_id,
-                    ingredient_name=row.name,
-                )
+        return [
+            Ingredient(
+                ingredient_id=row.ingredient_id,
+                ingredient_name=row.name,
             )
-
-    return all_ingredients
+            for row in results
+        ]
