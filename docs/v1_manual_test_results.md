@@ -18,16 +18,13 @@
 >    the IDs of chicken, rice, and broccoli. The app returns safe,
 >    peanut-free recipes like "Chicken and Broccoli Stir-Fry".
 
-> Replace `https://YOUR-RENDER-URL` below with the actual URL that Render
-> assigns after deploy. While testing locally, use `http://localhost:8000`.
-
 # Testing results
 
 ## Step 1 — Create Sarah's account
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/create' \
+  'https://foodgraph-api.onrender.com/users/create' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -52,7 +49,7 @@ Response (201 Created):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/add_allergy' \
+  'https://foodgraph-api.onrender.com/users/add_allergy' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -73,7 +70,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -95,7 +92,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -117,7 +114,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -139,7 +136,7 @@ Response (200 OK):
 
 ```
 curl -X 'GET' \
-  'https://YOUR-RENDER-URL/recipes/get_compatible?ingredient_ids=1&ingredient_ids=2&ingredient_ids=3&user_id=1' \
+  'https://foodgraph-api.onrender.com/recipes/get_compatible?ingredient_ids=1&ingredient_ids=2&ingredient_ids=3&user_id=1' \
   -H 'accept: application/json'
 ```
 

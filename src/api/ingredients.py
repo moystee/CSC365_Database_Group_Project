@@ -85,3 +85,26 @@ def delete_ingredient(payload: DeleteIngredientRequest) -> SuccessResponse:
                 detail="That ingredient is not in this user's pantry.",
             )
     return SuccessResponse(success=True)
+
+@router.get("/get_all_ingredients", response_model=List[Ingredient])
+def get_all_ingredients() -> List[Ingredient]:
+    """Return list of all ingredients.
+    """
+    with db.engine.begin() as conn:
+        results = conn.execute(
+                """
+                SELECT *
+                FROM ingredients
+                """
+        )
+
+        all_ingredients: list[Ingredient] = []
+        for row in results:
+            all_ingredients.append(
+                Ingredient(
+                    ingredient_id=row.ingredient_id,
+                    ingredient_name=row.name,
+                )
+            )
+
+    return all_ingredients
