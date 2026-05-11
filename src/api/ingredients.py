@@ -86,6 +86,10 @@ def delete_ingredient(payload: DeleteIngredientRequest) -> SuccessResponse:
             )
     return SuccessResponse(success=True)
 
+class Ingredient(BaseModel):
+    ingredient_id: int
+    ingredient_name: str
+
 @router.get("/get_all_ingredients", response_model=List[Ingredient])
 def get_all_ingredients() -> List[Ingredient]:
     """Return list of all ingredients.
