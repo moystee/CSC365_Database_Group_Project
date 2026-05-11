@@ -1,6 +1,6 @@
 # Example workflows
 
-> Replace `https://YOUR-RENDER-URL` with the actual URL Render assigns
+> Replace `https://foodgraph-api.onrender.com` with the actual URL Render assigns
 > after deploy. While testing locally, use `http://localhost:8000`.
 >
 > All three flows below were executed end-to-end against a fresh database
@@ -20,7 +20,7 @@
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/create' \
+  'https://foodgraph-api.onrender.com/users/create' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -39,7 +39,7 @@ Response (201 Created):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/add_allergy' \
+  'https://foodgraph-api.onrender.com/users/add_allergy' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -58,7 +58,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -77,7 +77,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -96,7 +96,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -115,7 +115,7 @@ Response (200 OK):
 
 ```
 curl -X 'GET' \
-  'https://YOUR-RENDER-URL/recipes/get_compatible?ingredient_ids=1&ingredient_ids=2&ingredient_ids=3&user_id=1' \
+  'https://foodgraph-api.onrender.com/recipes/get_compatible?ingredient_ids=1&ingredient_ids=2&ingredient_ids=3&user_id=1' \
   -H 'accept: application/json'
 ```
 
@@ -155,7 +155,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/create' \
+  'https://foodgraph-api.onrender.com/users/create' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -174,7 +174,7 @@ Response (201 Created):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/households/create' \
+  'https://foodgraph-api.onrender.com/households/create' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -193,7 +193,7 @@ Response (201 Created):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/create' \
+  'https://foodgraph-api.onrender.com/users/create' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -212,7 +212,7 @@ Response (201 Created):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/households/join' \
+  'https://foodgraph-api.onrender.com/households/join' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -231,7 +231,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -250,7 +250,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -269,7 +269,7 @@ Response (200 OK):
 
 ```
 curl -X 'GET' \
-  'https://YOUR-RENDER-URL/pantry/get_ingredients?user_id=2' \
+  'https://foodgraph-api.onrender.com/pantry/get_ingredients?user_id=2' \
   -H 'accept: application/json'
 ```
 
@@ -290,7 +290,7 @@ Response (200 OK):
 
 ```
 curl -X 'GET' \
-  'https://YOUR-RENDER-URL/recipes/get_compatible?ingredient_ids=9&ingredient_ids=10' \
+  'https://foodgraph-api.onrender.com/recipes/get_compatible?ingredient_ids=9&ingredient_ids=10' \
   -H 'accept: application/json'
 ```
 
@@ -320,7 +320,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/users/create' \
+  'https://foodgraph-api.onrender.com/users/create' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -338,11 +338,11 @@ Response (201 Created):
 ### Step 0b — David's initial pantry (rice + chicken)
 
 ```
-curl -X 'POST' 'https://YOUR-RENDER-URL/ingredients/save' \
+curl -X 'POST' 'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'Content-Type: application/json' \
   -d '{ "user_id": 4, "ingredient_id": 2 }'
 
-curl -X 'POST' 'https://YOUR-RENDER-URL/ingredients/save' \
+curl -X 'POST' 'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'Content-Type: application/json' \
   -d '{ "user_id": 4, "ingredient_id": 1 }'
 ```
@@ -357,7 +357,7 @@ Both responses (200 OK):
 
 ```
 curl -X 'GET' \
-  'https://YOUR-RENDER-URL/pantry/get_ingredients?user_id=4' \
+  'https://foodgraph-api.onrender.com/pantry/get_ingredients?user_id=4' \
   -H 'accept: application/json'
 ```
 
@@ -374,7 +374,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/delete' \
+  'https://foodgraph-api.onrender.com/ingredients/delete' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -393,7 +393,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/delete' \
+  'https://foodgraph-api.onrender.com/ingredients/delete' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -412,7 +412,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -431,7 +431,7 @@ Response (200 OK):
 
 ```
 curl -X 'POST' \
-  'https://YOUR-RENDER-URL/ingredients/save' \
+  'https://foodgraph-api.onrender.com/ingredients/save' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -450,7 +450,7 @@ Response (200 OK):
 
 ```
 curl -X 'GET' \
-  'https://YOUR-RENDER-URL/pantry/get_ingredients?user_id=4' \
+  'https://foodgraph-api.onrender.com/pantry/get_ingredients?user_id=4' \
   -H 'accept: application/json'
 ```
 
