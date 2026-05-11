@@ -3,18 +3,19 @@ services:
     name: foodgraph-api
     runtime: python
     plan: free
-    buildCommand: "pip install -r requirements.txt && alembic upgrade head"
+    # Migrations are run manually from a developer machine against the
+    # Supabase direct connection (port 5432) — see README. We deliberately
+    # do NOT run `alembic upgrade head` here because Render's build step
+    # may use the pooled connection, and pooled connections don't support
+    # the prepared statements Alembic uses.
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn src.server:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.13.4
+        value: "3.13.4"
+      # Set this in the Render dashboard (Service → Environment) to the
+      # Supabase Postgres connection string. Use the "Transaction pooler"
+      # URL (port 6543) for best behavior at runtime; Supabase already
+      # appends ?sslmode=require for you.
       - key: POSTGRES_URI
-        fromDatabase:
-          name: foodgraph-db
-          property: connectionString
-
-databases:
-  - name: foodgraph-db
-    plan: free
-    databaseName: foodgraph
-    user: foodgraph
+        sync: false

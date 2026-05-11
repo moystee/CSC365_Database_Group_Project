@@ -92,7 +92,9 @@ pantry = Table(
         ForeignKey("ingredients.ingredient_id", ondelete="RESTRICT"),
         nullable=False,
     ),
-    Column("is_shared_with_household", Boolean, nullable=False, server_default="false"),
+    # Default to TRUE: a pantry item is shared with the household by
+    # default. Users can opt out per-item to keep a private stash.
+    Column("is_shared_with_household", Boolean, nullable=False, server_default="true"),
     UniqueConstraint("user_id", "ingredient_id", name="uq_pantry_user_ingredient"),
 )
 
@@ -109,6 +111,31 @@ user_allergies = Table(
         "ingredient_id",
         Integer,
         ForeignKey("ingredients.ingredient_id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+)
+
+households = Table(
+    "households",
+    metadata,
+    Column("household_id", Integer, primary_key=True, autoincrement=True),
+    Column("household_name", String(200), nullable=False),
+)
+
+# A user can belong to one or more households; each membership is a row.
+household_members = Table(
+    "household_members",
+    metadata,
+    Column(
+        "household_id",
+        Integer,
+        ForeignKey("households.household_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.user_id", ondelete="CASCADE"),
         primary_key=True,
     ),
 )

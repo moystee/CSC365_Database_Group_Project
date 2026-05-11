@@ -76,3 +76,39 @@ def add_allergy(payload: AddAllergyRequest) -> SuccessResponse:
             # Allergy already recorded — idempotent success.
             pass
     return SuccessResponse(success=True)
+
+
+class GetAllergiesRequest(BaseModel):
+    user_id: int
+
+
+class Allergy(BaseModel):
+    ingredient_name: str
+
+
+@router.post("/get_allergies", response_model=list[Allergy])
+def get_allergies(payload: GetAllergiesRequest) -> list[Allergy]:
+    """Return the ingredient names a user has flagged as allergies.
+
+    Spec uses POST despite this being a read — we match the spec.
+    """
+    with db.engine.begin() as conn:
+        user_exists = conn.execute(
+            select(db.users.c.user_id).where(db.users.c.user_id == payload.user_id)
+        ).first()
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+        stmt = (
+            select(db.ingredients.c.name)
+            .select_from(
+                db.user_allergies.join(
+                    db.ingredients,
+                    db.user_allergies.c.ingredient_id
+                    == db.ingredients.c.ingredient_id,
+                )
+            )
+            .where(db.user_allergies.c.user_id == payload.user_id)
+            .order_by(db.ingredients.c.name)
+        )
+        return [Allergy(ingredient_name=row.name) for row in conn.execute(stmt)]
