@@ -36,7 +36,8 @@ Victor Wu, Jared Moy, Avery Robinson, Daniel Pineda
 │   └── versions/
 │       ├── 0001_initial_schema.py
 │       ├── 0002_seed_data.py
-│       └── 0003_households_and_v2_seeds.py
+│       ├── 0003_households_and_v2_seeds.py
+│       └── 0004_v3_schema_extras.py
 ├── alembic.ini
 ├── schema.sql              # alternative to alembic (raw CREATE + INSERTs)
 ├── render.yaml
@@ -95,10 +96,11 @@ cp .env.example .env
 alembic upgrade head
 ```
 
-This runs all three migrations:
+This runs all four migrations:
 - `0001_initial_schema` — creates `users`, `ingredients`, `recipes`, `recipe_ingredients`, `pantry`, `user_allergies`.
 - `0002_seed_data` — inserts the ingredient catalog (chicken=1, rice=2, broccoli=3, …, peanuts=42) and 5 recipes.
 - `0003_households_and_v2_seeds` — adds `households` + `household_members`, flips `pantry.is_shared_with_household` to default TRUE, and adds the "Eggs and Spinach Scramble" recipe used in Flow 2.
+- `0004_v3_schema_extras` — schema additions from the V2 code-review issues: quantities + units on `pantry` and `recipe_ingredients`, purchase/expiry dates on `pantry`, `created_at` audit columns everywhere, `last_name` on `users`, `created_by` on `recipes` and `households`, a CHECK constraint enforcing normalized ingredient names, and drops the unused `pantry.pantry_id` surrogate in favor of the composite `(user_id, ingredient_id)` PK.
 
 > Alternative without Alembic: `psql "$POSTGRES_URI" -f schema.sql`.
 > The `schema.sql` file in the repo root contains the same `CREATE TABLE`
@@ -161,30 +163,34 @@ The production setup splits responsibilities:
    only shows it once.
 3. Wait ~1 minute for the project to provision.
 4. In the Supabase dashboard go to **Project Settings → Database →
-   Connection string**. You'll see two URLs:
-   - **Direct connection** on port `5432` — used for migrations.
-   - **Transaction pooler** on port `6543` — used by the running app.
+   Connection string**. You'll see three URLs:
+   - **Direct connection** on port `5432` (host `db.<REF>.supabase.co`) — IPv6-only. Works for migrations *if* your network has IPv6.
+   - **Session pooler** on port `5432` (host `pooler.supabase.com`) — IPv4-accessible. Works for migrations.
+   - **Transaction pooler** on port `6543` (host `pooler.supabase.com`) — IPv4-accessible. Used by the running app. **Does not support Alembic** because it can't hold prepared statements across a session.
 
-   Copy both. They look like:
+   Copy the pair you'll use:
    ```
-   # Direct (for alembic):
+   # For alembic (either of these works):
+   # Direct (IPv6 only):
    postgresql://postgres:<PASSWORD>@db.<REF>.supabase.co:5432/postgres
+   # Session pooler (IPv4-friendly, recommended on most networks):
+   postgresql://postgres.<REF>:<PASSWORD>@aws-1-<REGION>.pooler.supabase.com:5432/postgres
 
-   # Pooler (for the app at runtime):
-   postgresql://postgres.<REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:6543/postgres
+   # For the app at runtime (transaction pooler):
+   postgresql://postgres.<REF>:<PASSWORD>@aws-1-<REGION>.pooler.supabase.com:6543/postgres
    ```
 
 ### 2. Apply migrations against Supabase (one-time, from your laptop)
 
-We do migrations from a developer machine using the **direct** URL,
-because the transaction pooler can't run all of Alembic's statements.
+We do migrations from a developer machine. Use either the **direct**
+connection (IPv6) or the **session pooler** (port `5432` on
+`pooler.supabase.com`). Don't use the transaction pooler on `6543` —
+it can't run all of Alembic's statements.
 
 ```bash
 # From the project root, with your venv activated:
-echo 'POSTGRES_URI=postgresql://postgres:<PASSWORD>@db.<REF>.supabase.co:5432/postgres' > .env.prod
-
-# Run migrations against Supabase (note --env-file overrides .env)
-POSTGRES_URI="postgresql://postgres:<PASSWORD>@db.<REF>.supabase.co:5432/postgres" \
+# (Session pooler URL is easiest on networks without IPv6.)
+POSTGRES_URI="postgresql://postgres.<REF>:<PASSWORD>@aws-1-<REGION>.pooler.supabase.com:5432/postgres" \
   alembic upgrade head
 ```
 
@@ -235,14 +241,26 @@ dashboard and choose **Manual Deploy → Clear build cache & deploy**.
 ### Re-running migrations later
 
 Whenever you add a new Alembic revision, apply it to Supabase the same
-way as in step 2 (using the **direct** connection, not the pooler):
+way as in step 2 (using the **direct** connection or the **session
+pooler** on port `5432`, *not* the transaction pooler on `6543`):
 
 ```bash
-POSTGRES_URI="postgresql://postgres:<PASSWORD>@db.<REF>.supabase.co:5432/postgres" \
+POSTGRES_URI="postgresql://postgres.<REF>:<PASSWORD>@aws-1-<REGION>.pooler.supabase.com:5432/postgres" \
   alembic upgrade head
 ```
 
-Then redeploy Render so the FastAPI code matches the new schema.
+Then push to GitHub — Render will auto-deploy the FastAPI code against
+the now-migrated schema. Order matters: always apply migrations *before*
+pushing code that depends on the new columns/constraints.
+
+### Keeping Alembic revision IDs short
+
+Alembic's `alembic_version` table stores the current revision in a
+`VARCHAR(32)` column. Keep revision identifiers (the `revision: str =
+"..."` value at the top of each migration file) at **≤ 32 characters**
+or `alembic upgrade head` will fail at the final version-stamp step
+with `value too long for type character varying(32)` — even after the
+DDL itself ran successfully.
 
 ---
 

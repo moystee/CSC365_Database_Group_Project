@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 
 from src import database as db
+from src.api.helpers import assert_exists
 
 router = APIRouter(prefix="/pantry", tags=["pantry"])
 
@@ -28,12 +29,10 @@ def get_ingredients(user_id: int = Query(..., description="User to fetch the pan
     `is_shared_with_household = true`. Duplicates across pantries collapse
     to a single entry.
     """
-    with db.engine.begin() as conn:
-        user_exists = conn.execute(
-            select(db.users.c.user_id).where(db.users.c.user_id == user_id)
-        ).first()
-        if not user_exists:
-            raise HTTPException(status_code=404, detail="User not found.")
+    # Read-only path: `engine.connect()` doesn't hold a write transaction
+    # slot the way `engine.begin()` does.
+    with db.engine.connect() as conn:
+        assert_exists(conn, db.users.c.user_id, user_id, label="User")
 
         # Every household-mate (other users in any of this user's households).
         my_households = select(db.household_members.c.household_id).where(

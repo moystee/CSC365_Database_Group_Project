@@ -3,11 +3,12 @@ services:
     name: foodgraph-api
     runtime: python
     plan: free
-    # Migrations are run manually from a developer machine against the
-    # Supabase direct connection (port 5432) — see README. We deliberately
-    # do NOT run `alembic upgrade head` here because Render's build step
-    # may use the pooled connection, and pooled connections don't support
-    # the prepared statements Alembic uses.
+    # Migrations are run manually from a developer machine — see README.
+    # We deliberately do NOT run `alembic upgrade head` here because the
+    # transaction pooler (port 6543) used at runtime doesn't support the
+    # prepared statements Alembic relies on. Either the session pooler
+    # (port 5432, host pooler.supabase.com) or the IPv6-only direct
+    # connection works for migrations.
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn src.server:app --host 0.0.0.0 --port $PORT"
     envVars:
