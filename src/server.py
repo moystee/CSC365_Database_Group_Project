@@ -13,12 +13,11 @@ from src.api.helpers import logger
 app = FastAPI(
     title="Food Graph API",
     description=(
-        "CSC 365 group project — V2. A recipe/pantry app where ingredients "
-        "and recipes form a graph. V2 covers all three example flows: "
-        "(1) Sarah managing allergies, (2) Mark + Leo sharing a household "
-        "pantry, (3) David tidying his pantry inventory."
+        "CSC 365 group project — Food Graph API. V4 adds complex endpoints "
+        "(household shopping list, ranked recipe recommendations) and "
+        "documented concurrency control for pantry updates."
     ),
-    version="0.2.0",
+    version="0.4.0",
 )
 
 
@@ -39,7 +38,7 @@ def root() -> dict[str, str]:
 
     return {
         "service": "Food Graph API",
-        "version": "0.2.0",
+        "version": "0.4.0",
         "docs": "/docs",
         "database": "ok",
     }

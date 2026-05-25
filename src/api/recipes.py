@@ -8,10 +8,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import and_, func, insert, select
+from sqlalchemy import and_, func, insert, select, update
 
 from src import database as db
-from src.api.helpers import assert_exists, logger
+from src.api.helpers import assert_exists, logger, transactional
+from src.api.models import SuccessResponse
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -273,3 +274,147 @@ def create_recipe(payload: CreateRecipeRequest) -> CreateRecipeResponse:
             raise
 
     return CreateRecipeResponse(recipe_id=recipe_id)
+
+
+class ConsumeRecipeRequest(BaseModel):
+    user_id: int = Field(
+        ...,
+        description="Pantry owner whose stock is deducted.",
+    )
+
+
+class ConsumedIngredient(BaseModel):
+    ingredient_id: int
+    name: str
+    quantity_used: Decimal | None = None
+    quantity_remaining: Decimal | None = None
+    unit: str | None = None
+
+
+class ConsumeRecipeResponse(BaseModel):
+    recipe_id: int
+    user_id: int
+    consumed: List[ConsumedIngredient]
+    message: str
+
+
+@router.post(
+    "/{recipe_id}/consume",
+    response_model=ConsumeRecipeResponse,
+    summary="Deduct recipe ingredients from a user's pantry (row locks)",
+)
+def consume_recipe(
+    recipe_id: int, payload: ConsumeRecipeRequest
+) -> ConsumeRecipeResponse:
+    """Cook a recipe: subtract required quantities from the user's pantry.
+
+    Each affected ``pantry`` row is locked with ``SELECT … FOR UPDATE`` inside
+    a ``SERIALIZABLE`` transaction so two concurrent cooks cannot both read the
+    same balance and produce a lost update.
+    """
+    with transactional(db.engine, isolation_level="SERIALIZABLE") as conn:
+        assert_exists(conn, db.users.c.user_id, payload.user_id, label="User")
+        assert_exists(conn, db.recipes.c.recipe_id, recipe_id, label="Recipe")
+
+        requirements = conn.execute(
+            select(
+                db.recipe_ingredients.c.ingredient_id,
+                db.ingredients.c.name,
+                db.recipe_ingredients.c.quantity,
+                db.recipe_ingredients.c.unit,
+            )
+            .select_from(
+                db.recipe_ingredients.join(
+                    db.ingredients,
+                    db.recipe_ingredients.c.ingredient_id
+                    == db.ingredients.c.ingredient_id,
+                )
+            )
+            .where(db.recipe_ingredients.c.recipe_id == recipe_id)
+        ).all()
+
+        if not requirements:
+            raise HTTPException(
+                status_code=404,
+                detail="Recipe has no ingredients on file.",
+            )
+
+        ingredient_ids = [row.ingredient_id for row in requirements]
+        pantry_rows = {
+            row.ingredient_id: row
+            for row in conn.execute(
+                select(
+                    db.pantry.c.ingredient_id,
+                    db.pantry.c.quantity,
+                    db.pantry.c.unit,
+                )
+                .where(
+                    db.pantry.c.user_id == payload.user_id,
+                    db.pantry.c.ingredient_id.in_(ingredient_ids),
+                )
+                .with_for_update()
+            )
+        }
+
+        consumed: list[ConsumedIngredient] = []
+        for req in requirements:
+            pantry_row = pantry_rows.get(req.ingredient_id)
+            if pantry_row is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Missing pantry item: {req.name} "
+                        f"(ingredient_id={req.ingredient_id})."
+                    ),
+                )
+
+            needed = req.quantity
+            on_hand = pantry_row.quantity
+
+            if needed is not None and on_hand is not None:
+                if on_hand < needed:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"Insufficient {req.name}: need {needed} "
+                            f"{req.unit or ''}, have {on_hand} "
+                            f"{pantry_row.unit or ''}.".strip()
+                        ),
+                    )
+                remaining = on_hand - needed
+                conn.execute(
+                    update(db.pantry)
+                    .where(
+                        db.pantry.c.user_id == payload.user_id,
+                        db.pantry.c.ingredient_id == req.ingredient_id,
+                    )
+                    .values(quantity=remaining)
+                )
+                consumed.append(
+                    ConsumedIngredient(
+                        ingredient_id=req.ingredient_id,
+                        name=req.name,
+                        quantity_used=needed,
+                        quantity_remaining=remaining,
+                        unit=pantry_row.unit or req.unit,
+                    )
+                )
+            else:
+                # Quantity not tracked on one or both sides: presence-only
+                # consumption (legacy binary pantry semantics).
+                consumed.append(
+                    ConsumedIngredient(
+                        ingredient_id=req.ingredient_id,
+                        name=req.name,
+                        quantity_used=needed,
+                        quantity_remaining=on_hand,
+                        unit=pantry_row.unit or req.unit,
+                    )
+                )
+
+        return ConsumeRecipeResponse(
+            recipe_id=recipe_id,
+            user_id=payload.user_id,
+            consumed=consumed,
+            message="Pantry quantities updated for recipe.",
+        )

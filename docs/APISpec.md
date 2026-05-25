@@ -1,276 +1,213 @@
-API Speculation
+# Food Graph API Specification (V4)
 
-Write:
+Base URL (deployed): `https://foodgraph-api.onrender.com`  
+Interactive docs: `/docs`
 
-User sign up
+Legacy V2 paths remain available but are marked **deprecated** in OpenAPI where RESTful replacements exist.
 
-New User - /users/create (POST)
+---
 
-Creates a new user
+## V4 complex endpoints (submission call-out)
 
-Request:
+These two endpoints go beyond simple CRUD: they join multiple tables, apply business rules, and return derived aggregates.
 
+### 1. `GET /households/{household_id}/shopping-list`
+
+**Purpose:** Given a household and a target recipe, return which required ingredients the household already has vs still needs to buy.
+
+**Query parameters**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `recipe_id` | int | yes | Recipe to make |
+| `user_id` | int | yes | Household member requesting the diff (must be a member) |
+
+**Example**
+
+```bash
+curl -s "https://foodgraph-api.onrender.com/households/1/shopping-list?recipe_id=4&user_id=2"
+```
+
+**Response (200)**
+
+```json
 {
-
-  "first_name": "string",
-  
-  "email": "string"
-  
+  "household_id": 1,
+  "household_name": "The Bachelor Pad",
+  "recipe_id": 4,
+  "recipe_name": "Tomato Basil Spaghetti-Style Rice",
+  "have": [
+    {"ingredient_id": 2, "name": "rice", "quantity_needed": null, "unit": null}
+  ],
+  "missing": [
+    {"ingredient_id": 5, "name": "garlic", "quantity_needed": null, "unit": null}
+  ],
+  "coverage_pct": 20
 }
-Response:
+```
 
+**Tables joined:** `households`, `household_members`, `pantry`, `recipe_ingredients`, `ingredients`, `recipes`.
+
+**Concurrency:** Runs under `REPEATABLE READ` (see `concurrency.md`).
+
+---
+
+### 2. `GET /users/{user_id}/top-recipes`
+
+**Purpose:** Rank recipes by pantry coverage (including shared household items), exclude allergen recipes, and list missing ingredients for partial matches.
+
+**Query parameters**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `limit` | int | 5 | Max recipes (1–50) |
+
+**Example**
+
+```bash
+curl -s "https://foodgraph-api.onrender.com/users/1/top-recipes?limit=3"
+```
+
+**Response (200)**
+
+```json
 [
-
-    {
-    
-         "user_id": "int",
-         
-    }
-    
+  {
+    "recipe_id": 1,
+    "recipe_name": "Chicken and Broccoli Stir-Fry",
+    "recipe_steps": "…",
+    "coverage_pct": 100,
+    "have_count": 3,
+    "total_count": 3,
+    "missing_ingredients": []
+  },
+  {
+    "recipe_id": 4,
+    "recipe_name": "Tomato Basil Spaghetti-Style Rice",
+    "recipe_steps": "…",
+    "coverage_pct": 20,
+    "have_count": 1,
+    "total_count": 5,
+    "missing_ingredients": [
+      {"ingredient_id": 5, "name": "garlic"}
+    ]
+  }
 ]
+```
 
-User saving ingredients to their pantry
+**Tables joined:** `users`, `user_allergies`, `household_members`, `pantry`, `recipe_ingredients`, `recipes`, `ingredients`.
 
-Save Ingredient - /ingredients/save (POST)
+---
 
-Saves ingredient(s) to pantry
+### Related: `POST /recipes/{recipe_id}/consume` (concurrency, not counted as a “complex endpoint”)
 
-Request:
+Deducts recipe ingredient quantities from a user’s pantry using `SERIALIZABLE` + row locks. Documented in `concurrency.md`.
 
+---
+
+## Users
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/users/create` | Create user (201, `{user_id}`) |
+| GET | `/users/{user_id}` | Profile |
+| DELETE | `/users/{user_id}` | Delete account |
+| POST | `/users/add_allergy` | Add allergy |
+| DELETE | `/users/{user_id}/allergies/{ingredient_id}` | Remove allergy |
+| GET | `/users/{user_id}/allergies` | List allergies |
+| GET | `/users/{user_id}/top-recipes` | **Complex:** ranked recipes |
+| POST | `/users/get_allergies` | Deprecated → use GET allergies |
+
+**Create user request**
+
+```json
 {
-
-  "user_id": "int",
-  
-  "ingredient_id": "int",
-  
-  “Is_shared_with_household”: “boolean”
-  
+  "first_name": "Sarah",
+  "last_name": "Smith",
+  "email": "sarah@example.com"
 }
+```
 
-Response:
+---
 
-[
+## Ingredients & pantry writes
 
-    {
-    
-         "Success”: “boolean”,
-         
-    }
-    
-]
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/ingredients/save` | Upsert pantry row (optional quantity, unit, dates) |
+| DELETE | `/ingredients/{ingredient_id}?user_id=` | Remove from pantry |
+| GET | `/ingredients` | List catalog |
+| POST | `/ingredients/delete` | Deprecated |
+| GET | `/ingredients/get_all_ingredients` | Deprecated |
 
-User deleting ingredient from their pantry
+**Save request**
 
-Delete Ingredient - /ingredients/delete (POST)
-
-Deletes ingredient(s) to pantry
-
-Request:
-
+```json
 {
-
-  "user_id": "int",
-  
-  "ingredient_id": "int"
-  
+  "user_id": 1,
+  "ingredient_id": 2,
+  "is_shared_with_household": true,
+  "quantity": 2.0,
+  "unit": "cup",
+  "purchase_date": "2026-05-01",
+  "expiry_date": "2026-05-20"
 }
+```
 
-Response:
+**Success response**
 
-[
+```json
+{"success": true, "message": "Ingredient saved to pantry."}
+```
 
-    {
-    
-         "Success”: “boolean”,
-         
-    }
-    
-]
+---
 
-User saving allergies to their profile
+## Pantry read
 
-Add allergy - /users/add_allergy (POST)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/pantry/get_ingredients?user_id=` | Own pantry + housemates’ shared items |
 
-Request:
+**Response:** array of `{ingredient_id, name}`.
 
-{
+---
 
-  "user_id": "int",
-  
-  "ingredient_id": "int"
-  
-}
+## Households
 
-Response:
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/households/create` | Create household (creator auto-joins) |
+| POST | `/households/join` | Join (one household per user) |
+| DELETE | `/households/{household_id}/members/{user_id}` | Leave household |
+| GET | `/households/{household_id}/shopping-list` | **Complex:** shopping diff |
 
-[
+---
 
-    {
-    
-         "Success”: “boolean”,
-         
-    }
-    
-]
+## Recipes
 
-User creating a household
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/recipes/get_compatible` | Full-match recipes for ingredient list (+ optional allergy filter) |
+| GET | `/recipes` | Browse/search catalog |
+| POST | `/recipes` | Create user recipe + ingredients |
+| POST | `/recipes/{recipe_id}/consume` | Deduct pantry stock for cooking |
 
-Create Household - /households/create (POST)
+**Compatible recipes (query params):** `ingredient_ids` (repeatable), optional `user_id` for allergy exclusion.
 
-Creates household
+---
 
-Request:
+## Meta
 
-[
-    {
-    
-         "user_id": "int",
-         
-         “household_name”: “string”
-         
-    }
-    
-]
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Health check (`database: ok` when Postgres is reachable) |
 
-Response:
+---
 
-[
+## Error conventions
 
-    {
-    
-         "household_id": "int",
-         
-    }
-    
-]
-
-User joining a household
-
-Join Household - /households/join (POST)
-
-Adds User to household
-
-Request:
-
-[
-
-    {
-    
-          "household_id": "int",
-          
-          "user_id": "int"
-          
-     }
-     
-Response:
-
-[
-
-    {
-    
-        "Success”: “boolean”
-        
-    }
-    
-]
-
-Read:
-
-Get list of compatible recipes
-
-Get Compatible Recipes - /recipes/get_compatible (GET)
-
-Retrieves the list of recipes compatible with the selected ingredients
-
-Request:
-
-[
-
-    {
-    
-        "ingredient_id": "int"
-        
-    }
-    
-]
-
-Response:
-
-[
-
-    {
-    
-        "recipe_id": "int",
-        
-        "recipe_name": "string",
-        
-        "recipe_steps": "string"
-        
-    }
-    
-]
-
-Get Ingredients from user’s pantry
-
-Get Ingredients from pantry - /pantry/get_ingredients (GET)
-
-Retrieves the list of ingredients from the user’s pantry
-
-Request:
-
-[
-
-    {
-    
-        "user_id": "int"
-        
-    }
-    
-]
-
-Response:
-
-[
-
-    {
-    
-        "ingredient_id": "int",
-        
-        "name": "string",
-        
-        "steps": "string"
-        
-    }
-    
-]
-
-
-Get user allergies
-
-Get allergies from user - /users/get_allergies (POST)
-
-Get user’s allergies
-
-Request:
-
-[
-
-    {
-    
-        "user_id": "int"
-        
-    }
-    
-]
-
-Response:
-
-[
-
-    {
-    
-        “ingredient_name": "string"
-        
-    }
-    
-]
+| Code | When |
+|------|------|
+| 404 | User, ingredient, recipe, pantry row, or membership not found |
+| 409 | Duplicate email, already in another household, insufficient pantry for consume |
+| 503 | Database unreachable on health check |

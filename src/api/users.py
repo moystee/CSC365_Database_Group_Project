@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from src import database as db
@@ -257,3 +257,153 @@ def get_allergies(payload: GetAllergiesRequest) -> list[Allergy]:
 def list_allergies(user_id: int) -> list[Allergy]:
     """Return the ingredient names this user has flagged as allergies."""
     return _query_allergies(user_id)
+
+
+class MissingIngredient(BaseModel):
+    ingredient_id: int
+    name: str
+
+
+class TopRecipe(BaseModel):
+    recipe_id: int
+    recipe_name: str
+    recipe_steps: str
+    coverage_pct: int
+    have_count: int
+    total_count: int
+    missing_ingredients: List[MissingIngredient]
+
+
+@router.get(
+    "/{user_id}/top-recipes",
+    response_model=List[TopRecipe],
+    summary="Complex endpoint: rank recipes by pantry coverage",
+)
+def top_recipes(
+    user_id: int,
+    limit: int = Query(default=5, ge=1, le=50),
+) -> List[TopRecipe]:
+    """Return recipes ranked by how much of each one the user can already make.
+
+    Considers the user's own pantry plus shared items from household members,
+    and excludes any recipe that contains one of the user's allergens. Partial
+    matches are included (unlike ``GET /recipes/get_compatible``).
+    """
+    with db.engine.connect() as conn:
+        assert_exists(conn, db.users.c.user_id, user_id, label="User")
+
+        my_pantry = select(db.pantry.c.ingredient_id).where(
+            db.pantry.c.user_id == user_id
+        )
+        my_households = select(db.household_members.c.household_id).where(
+            db.household_members.c.user_id == user_id
+        )
+        housemates = (
+            select(db.household_members.c.user_id)
+            .where(db.household_members.c.household_id.in_(my_households))
+            .where(db.household_members.c.user_id != user_id)
+        )
+        shared_pantry = select(db.pantry.c.ingredient_id).where(
+            db.pantry.c.user_id.in_(housemates),
+            db.pantry.c.is_shared_with_household.is_(True),
+        )
+        available = my_pantry.union(shared_pantry).subquery("available")
+
+        allergens = select(db.user_allergies.c.ingredient_id).where(
+            db.user_allergies.c.user_id == user_id
+        )
+        recipes_with_allergens = (
+            select(db.recipe_ingredients.c.recipe_id)
+            .where(db.recipe_ingredients.c.ingredient_id.in_(allergens))
+            .distinct()
+        )
+
+        total_required = func.count(db.recipe_ingredients.c.ingredient_id)
+        have_required = func.count(db.recipe_ingredients.c.ingredient_id).filter(
+            db.recipe_ingredients.c.ingredient_id.in_(
+                select(available.c.ingredient_id)
+            )
+        )
+
+        ranked = (
+            select(
+                db.recipes.c.recipe_id,
+                db.recipes.c.recipe_name,
+                db.recipes.c.recipe_steps,
+                total_required.label("total_count"),
+                have_required.label("have_count"),
+            )
+            .select_from(
+                db.recipes.join(
+                    db.recipe_ingredients,
+                    db.recipes.c.recipe_id == db.recipe_ingredients.c.recipe_id,
+                )
+            )
+            .where(db.recipes.c.recipe_id.not_in(recipes_with_allergens))
+            .group_by(
+                db.recipes.c.recipe_id,
+                db.recipes.c.recipe_name,
+                db.recipes.c.recipe_steps,
+            )
+            .having(total_required > 0)
+            .order_by(
+                have_required.desc(),
+                db.recipes.c.recipe_name,
+            )
+            .limit(limit)
+        )
+
+        rows = conn.execute(ranked).all()
+        if not rows:
+            return []
+
+        recipe_ids = [row.recipe_id for row in rows]
+        missing_rows = conn.execute(
+            select(
+                db.recipe_ingredients.c.recipe_id,
+                db.ingredients.c.ingredient_id,
+                db.ingredients.c.name,
+            )
+            .select_from(
+                db.recipe_ingredients.join(
+                    db.ingredients,
+                    db.recipe_ingredients.c.ingredient_id
+                    == db.ingredients.c.ingredient_id,
+                )
+            )
+            .where(
+                db.recipe_ingredients.c.recipe_id.in_(recipe_ids),
+                db.recipe_ingredients.c.ingredient_id.not_in(
+                    select(available.c.ingredient_id)
+                ),
+            )
+            .order_by(
+                db.recipe_ingredients.c.recipe_id, db.ingredients.c.name
+            )
+        ).all()
+
+    missing_by_recipe: dict[int, list[MissingIngredient]] = {
+        rid: [] for rid in recipe_ids
+    }
+    for row in missing_rows:
+        missing_by_recipe[row.recipe_id].append(
+            MissingIngredient(ingredient_id=row.ingredient_id, name=row.name)
+        )
+
+    results: list[TopRecipe] = []
+    for row in rows:
+        total = row.total_count or 0
+        have = row.have_count or 0
+        coverage = round(100 * have / total) if total else 0
+        results.append(
+            TopRecipe(
+                recipe_id=row.recipe_id,
+                recipe_name=row.recipe_name,
+                recipe_steps=row.recipe_steps,
+                coverage_pct=coverage,
+                have_count=have,
+                total_count=total,
+                missing_ingredients=missing_by_recipe[row.recipe_id],
+            )
+        )
+    return results

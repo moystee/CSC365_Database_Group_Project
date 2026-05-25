@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from decimal import Decimal
+from typing import List
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, insert, select
+from sqlalchemy import and_, delete, insert, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from src import database as db
-from src.api.helpers import assert_exists, logger
+from src.api.helpers import assert_exists, logger, transactional
 from src.api.models import SuccessResponse
 
 router = APIRouter(prefix="/households", tags=["households"])
@@ -41,6 +44,20 @@ def create_household(payload: CreateHouseholdRequest) -> CreateHouseholdResponse
     """
     with db.engine.begin() as conn:
         assert_exists(conn, db.users.c.user_id, payload.user_id, label="User")
+
+        existing_membership = conn.execute(
+            select(db.household_members.c.household_id).where(
+                db.household_members.c.user_id == payload.user_id
+            )
+        ).first()
+        if existing_membership:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "User already belongs to a household. Leave it before "
+                    "creating another."
+                ),
+            )
 
         try:
             household_id = conn.execute(
@@ -110,6 +127,22 @@ def join_household(payload: JoinHouseholdRequest) -> SuccessResponse:
                 message="User is already a member of this household.",
             )
 
+        # One household per user keeps pantry-merge semantics predictable
+        # (peer review Aaron Lee schema #5).
+        other_membership = conn.execute(
+            select(db.household_members.c.household_id).where(
+                db.household_members.c.user_id == payload.user_id
+            )
+        ).first()
+        if other_membership:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "User already belongs to a household. Leave it before "
+                    "joining another."
+                ),
+            )
+
         try:
             conn.execute(
                 insert(db.household_members).values(
@@ -160,3 +193,148 @@ def leave_household(household_id: int, user_id: int) -> SuccessResponse:
             )
 
     return SuccessResponse(success=True, message="User left household.")
+
+
+class ShoppingListIngredient(BaseModel):
+    ingredient_id: int
+    name: str
+    quantity_needed: Decimal | None = None
+    unit: str | None = None
+
+
+class ShoppingListResponse(BaseModel):
+    household_id: int
+    household_name: str
+    recipe_id: int
+    recipe_name: str
+    have: List[ShoppingListIngredient]
+    missing: List[ShoppingListIngredient]
+    coverage_pct: int
+
+
+@router.get(
+    "/{household_id}/shopping-list",
+    response_model=ShoppingListResponse,
+    summary="Complex endpoint: recipe vs combined household pantry",
+)
+def household_shopping_list(
+    household_id: int,
+    recipe_id: int = Query(..., description="Recipe the household wants to make."),
+    user_id: int = Query(
+        ...,
+        description=(
+            "Member requesting the list. Their own pantry items are always "
+            "included; other members' items count only when shared."
+        ),
+    ),
+) -> ShoppingListResponse:
+    """Diff a recipe's ingredient list against the household's combined pantry.
+
+    Joins households, household_members, pantry, recipe_ingredients, ingredients,
+    and recipes. Runs under REPEATABLE READ so the pantry snapshot and recipe
+    requirements stay consistent for the duration of the transaction.
+    """
+    with transactional(
+        db.engine, isolation_level="REPEATABLE READ"
+    ) as conn:
+        assert_exists(
+            conn,
+            db.households.c.household_id,
+            household_id,
+            label="Household",
+        )
+        assert_exists(conn, db.users.c.user_id, user_id, label="User")
+        assert_exists(conn, db.recipes.c.recipe_id, recipe_id, label="Recipe")
+
+        is_member = conn.execute(
+            select(db.household_members.c.user_id).where(
+                db.household_members.c.household_id == household_id,
+                db.household_members.c.user_id == user_id,
+            )
+        ).first()
+        if not is_member:
+            raise HTTPException(
+                status_code=403,
+                detail="user_id is not a member of this household.",
+            )
+
+        household_name = conn.execute(
+            select(db.households.c.household_name).where(
+                db.households.c.household_id == household_id
+            )
+        ).scalar_one()
+        recipe_name = conn.execute(
+            select(db.recipes.c.recipe_name).where(
+                db.recipes.c.recipe_id == recipe_id
+            )
+        ).scalar_one()
+
+        # Pantry rows visible to this household: every member's shared items
+        # plus the requesting user's private items.
+        household_members = select(db.household_members.c.user_id).where(
+            db.household_members.c.household_id == household_id
+        )
+        pantry_visible = and_(
+            db.pantry.c.user_id.in_(household_members),
+            (
+                (db.pantry.c.user_id == user_id)
+                | db.pantry.c.is_shared_with_household.is_(True)
+            ),
+        )
+
+        have_ids = {
+            row.ingredient_id
+            for row in conn.execute(
+                select(db.pantry.c.ingredient_id).where(pantry_visible)
+            )
+        }
+
+        required = conn.execute(
+            select(
+                db.ingredients.c.ingredient_id,
+                db.ingredients.c.name,
+                db.recipe_ingredients.c.quantity,
+                db.recipe_ingredients.c.unit,
+            )
+            .select_from(
+                db.recipe_ingredients.join(
+                    db.ingredients,
+                    db.recipe_ingredients.c.ingredient_id
+                    == db.ingredients.c.ingredient_id,
+                )
+            )
+            .where(db.recipe_ingredients.c.recipe_id == recipe_id)
+            .order_by(db.ingredients.c.name)
+        ).all()
+
+        if not required:
+            raise HTTPException(
+                status_code=404,
+                detail="Recipe has no ingredients on file.",
+            )
+
+        have: list[ShoppingListIngredient] = []
+        missing: list[ShoppingListIngredient] = []
+        for row in required:
+            item = ShoppingListIngredient(
+                ingredient_id=row.ingredient_id,
+                name=row.name,
+                quantity_needed=row.quantity,
+                unit=row.unit,
+            )
+            if row.ingredient_id in have_ids:
+                have.append(item)
+            else:
+                missing.append(item)
+
+        coverage_pct = round(100 * len(have) / len(required))
+
+        return ShoppingListResponse(
+            household_id=household_id,
+            household_name=household_name,
+            recipe_id=recipe_id,
+            recipe_name=recipe_name,
+            have=have,
+            missing=missing,
+            coverage_pct=coverage_pct,
+        )
