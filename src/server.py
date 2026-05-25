@@ -10,14 +10,66 @@ from src import database as db
 from src.api import households, ingredients, pantry, recipes, users
 from src.api.helpers import logger
 
+API_VERSION = "0.4.0"
+
+OPENAPI_DESCRIPTION = """
+CSC 365 **Food Graph API** (V4).
+
+### V4 complex endpoints (submission)
+- `GET /households/{household_id}/shopping-list` — recipe vs combined household pantry (`have` / `missing` / `coverage_pct`)
+- `GET /users/{user_id}/top-recipes` — recipes ranked by pantry coverage; partial matches + `missing_ingredients`
+
+### Concurrency
+- `POST /recipes/{recipe_id}/consume` — deduct pantry quantities (`SERIALIZABLE` + row locks)
+- See repo root `concurrency.md` for isolation-level rationale
+
+### Notable V3/V4 additions
+- REST aliases: `GET /users/{id}/allergies`, `DELETE /ingredients/{id}`, `GET /ingredients`, `GET /recipes`, `POST /recipes`
+- `GET /users/{id}` profile, `DELETE /users/{id}`, leave household, remove allergy
+- Pantry quantities, expiry dates, timestamps (schema migration `0004_v3_schema_extras`)
+
+Legacy V2 paths (`POST /users/get_allergies`, `POST /ingredients/delete`, etc.) remain but are marked **deprecated** in this spec.
+""".strip()
+
+OPENAPI_TAGS = [
+    {
+        "name": "meta",
+        "description": "Service health (`GET /` pings the database).",
+    },
+    {
+        "name": "users",
+        "description": "Accounts, allergies, and **top-recipes** recommendations.",
+    },
+    {
+        "name": "ingredients",
+        "description": "Ingredient catalog and pantry upsert/delete.",
+    },
+    {
+        "name": "pantry",
+        "description": "Read merged pantry (own + shared household items).",
+    },
+    {
+        "name": "households",
+        "description": "Create/join/leave households and **shopping-list** diffs.",
+    },
+    {
+        "name": "recipes",
+        "description": "Compatibility search, catalog browse, create, and **consume**.",
+    },
+]
+
 app = FastAPI(
     title="Food Graph API",
-    description=(
-        "CSC 365 group project — Food Graph API. V4 adds complex endpoints "
-        "(household shopping list, ranked recipe recommendations) and "
-        "documented concurrency control for pantry updates."
-    ),
-    version="0.4.0",
+    description=OPENAPI_DESCRIPTION,
+    version=API_VERSION,
+    openapi_tags=OPENAPI_TAGS,
+    servers=[
+        {
+            "url": "https://foodgraph-api.onrender.com",
+            "description": "Render production",
+        },
+        {"url": "http://localhost:8000", "description": "Local uvicorn"},
+    ],
 )
 
 
@@ -38,8 +90,9 @@ def root() -> dict[str, str]:
 
     return {
         "service": "Food Graph API",
-        "version": "0.4.0",
+        "version": API_VERSION,
         "docs": "/docs",
+        "openapi": "/openapi.json",
         "database": "ok",
     }
 
