@@ -11,28 +11,29 @@ Implementation helpers live in `src/api/helpers.py` (`transactional()` with opti
 **Endpoint:** `POST /recipes/{recipe_id}/consume`  
 **Phenomenon without protection:** **Lost update**
 
-Two roommates (or two tabs for the same user) cook the same recipe at the same time. Each transaction reads `pantry.quantity = 2.0`, subtracts `1.5`, and writes `0.5`. With no row locking, both reads happen before either write commits, so both writers store `0.5` even though the correct final balance is **−1.0** (or the second cook should fail).
+Two roommates (or two tabs for the same user) cook the same recipe at the same time. Each transaction reads `pantry.quantity = 2.0`, subtracts `1.5`, and writes `0.5`. With no row locking, both reads happen before either write commits, so both writers store `0.5` even though the correct final balance is **-1.0** (or the second cook should fail).
 
 ### Sequence diagram (unprotected)
 
 ```mermaid
 sequenceDiagram
-    participant A as Request A (consume)
-    participant B as Request B (consume)
+    participant A as Request A
+    participant B as Request B
     participant DB as PostgreSQL
 
     A->>DB: BEGIN
     B->>DB: BEGIN
-    A->>DB: SELECT quantity FROM pantry WHERE user_id=2 AND ingredient_id=1
-    B->>DB: SELECT quantity FROM pantry WHERE user_id=2 AND ingredient_id=1
+    A->>DB: SELECT quantity FROM pantry
+    B->>DB: SELECT quantity FROM pantry
     DB-->>A: quantity = 2.0
     DB-->>B: quantity = 2.0
-    A->>DB: UPDATE pantry SET quantity = 0.5
-    B->>DB: UPDATE pantry SET quantity = 0.5
+    A->>DB: UPDATE quantity = 0.5
+    B->>DB: UPDATE quantity = 0.5
     A->>DB: COMMIT
     B->>DB: COMMIT
-    Note over DB: Final quantity is 0.5; one deduction was lost
 ```
+
+Both commits succeed but the final quantity is **0.5** — one deduction was lost.
 
 ### What we do
 
@@ -45,20 +46,20 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant A as Request A (consume)
-    participant B as Request B (consume)
+    participant A as Request A
+    participant B as Request B
     participant DB as PostgreSQL
 
     A->>DB: BEGIN SERIALIZABLE
-    A->>DB: SELECT ... FROM pantry WHERE ... FOR UPDATE
-    DB-->>A: quantity = 2.0 (row locked)
+    A->>DB: SELECT FOR UPDATE
+    DB-->>A: quantity 2.0 row locked
     B->>DB: BEGIN SERIALIZABLE
-    B->>DB: SELECT ... FOR UPDATE
-    Note over B,DB: Blocks until A commits
+    B->>DB: SELECT FOR UPDATE
+    Note over B: waits for A to commit
     A->>DB: UPDATE quantity = 0.5
     A->>DB: COMMIT
-    B->>DB: (lock acquired) quantity = 0.5
-    B-->>B: 409 insufficient quantity OR UPDATE to 0.0
+    B->>DB: lock acquired quantity 0.5
+    B->>DB: 409 insufficient OR UPDATE to 0.0
 ```
 
 ---
@@ -68,26 +69,27 @@ sequenceDiagram
 **Endpoint:** `GET /households/{household_id}/shopping-list`  
 **Phenomenon without protection:** **Non-repeatable read** (and potentially **phantom read** if membership changes mid-request)
 
-A client requests a shopping list. Mid-request, another member saves a shared ingredient. Without a stable snapshot, the handler could observe “rice is missing” in one sub-query and “rice is present” in another, returning inconsistent `have` / `missing` / `coverage_pct`.
+A client requests a shopping list. Mid-request, another member saves a shared ingredient. Without a stable snapshot, the handler could observe "rice is missing" in one sub-query and "rice is present" in another, returning inconsistent `have` / `missing` / `coverage_pct`.
 
 ### Sequence diagram (unprotected, default READ COMMITTED)
 
 ```mermaid
 sequenceDiagram
-    participant C as Client (shopping-list)
-    participant M as Member (save ingredient)
+    participant C as Client
+    participant M as Member
     participant DB as PostgreSQL
 
-    C->>DB: BEGIN (READ COMMITTED)
-    C->>DB: Query recipe ingredients for recipe 4
+    C->>DB: BEGIN READ COMMITTED
+    C->>DB: query recipe ingredients
     M->>DB: BEGIN
-    M->>DB: UPSERT pantry (add rice, shared=true)
+    M->>DB: UPSERT pantry add rice shared
     M->>DB: COMMIT
-    C->>DB: Query household pantry IDs
-    DB-->>C: rice not in set (stale view vs reality)
+    C->>DB: query household pantry IDs
+    DB-->>C: rice not in set
     C->>DB: COMMIT
-    Note over C: Response lists rice under missing; member already added it
 ```
+
+The client response lists rice as **missing** even though the member already added it.
 
 ### What we do
 
@@ -103,26 +105,26 @@ sequenceDiagram
 **Endpoint:** `POST /ingredients/save`  
 **Phenomenon without protection:** **Lost update** / **write skew** on the same logical row
 
-Two requests upsert the same `(user_id, ingredient_id)` with different `quantity` or `is_shared_with_household` values. Plain read-then-write would leave whichever commit lands last, silently discarding the other client’s fields.
+Two requests upsert the same `(user_id, ingredient_id)` with different `quantity` or `is_shared_with_household` values. Plain read-then-write would leave whichever commit lands last, silently discarding the other client's fields.
 
 ### Sequence diagram (unprotected read-modify-write)
 
 ```mermaid
 sequenceDiagram
-    participant A as Request A (save)
-    participant B as Request B (save)
+    participant A as Request A
+    participant B as Request B
     participant DB as PostgreSQL
 
     A->>DB: BEGIN
     B->>DB: BEGIN
-    A->>DB: SELECT * FROM pantry WHERE user_id=1 AND ingredient_id=2
-    B->>DB: SELECT * FROM pantry WHERE user_id=1 AND ingredient_id=2
+    A->>DB: SELECT pantry row
+    B->>DB: SELECT pantry row
     DB-->>A: no row
     DB-->>B: no row
-    A->>DB: INSERT quantity=1.0, shared=true
-    B->>DB: INSERT quantity=3.0, shared=false
+    A->>DB: INSERT qty 1.0 shared true
+    B->>DB: INSERT qty 3.0 shared false
     A->>DB: COMMIT
-    B->>DB: COMMIT (duplicate key OR wrong final row)
+    B->>DB: COMMIT fails or wrong row
 ```
 
 ### What we do
