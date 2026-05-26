@@ -36,7 +36,7 @@ sequenceDiagram
 
 ### What we do
 
-`consume_recipe` runs inside `transactional(..., isolation_level="SERIALIZABLE")` and locks each affected pantry row with `SELECT … FOR UPDATE` before checking amounts and issuing `UPDATE`.
+`consume_recipe` runs inside `transactional(..., isolation_level="SERIALIZABLE")` and locks each affected pantry row with `SELECT ... FOR UPDATE` before checking amounts and issuing `UPDATE`.
 
 - **`FOR UPDATE`** blocks a second consumer from reading the balance until the first transaction finishes, preventing the interleaved read/read/write/write pattern above.
 - **`SERIALIZABLE`** is appropriate here because we read multiple pantry rows and must commit or abort as a unit; a failed serializable transaction can be retried by the client.
@@ -50,10 +50,10 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     A->>DB: BEGIN SERIALIZABLE
-    A->>DB: SELECT … FROM pantry WHERE … FOR UPDATE
+    A->>DB: SELECT ... FROM pantry WHERE ... FOR UPDATE
     DB-->>A: quantity = 2.0 (row locked)
     B->>DB: BEGIN SERIALIZABLE
-    B->>DB: SELECT … FOR UPDATE
+    B->>DB: SELECT ... FOR UPDATE
     Note over B,DB: Blocks until A commits
     A->>DB: UPDATE quantity = 0.5
     A->>DB: COMMIT
@@ -130,8 +130,8 @@ sequenceDiagram
 `save_ingredient` uses a single-statement PostgreSQL upsert inside `engine.begin()`:
 
 ```sql
-INSERT INTO pantry (…) VALUES (…)
-ON CONFLICT ON CONSTRAINT pantry_pkey DO UPDATE SET …
+INSERT INTO pantry (...) VALUES (...)
+ON CONFLICT ON CONSTRAINT pantry_pkey DO UPDATE SET ...
 ```
 
 - The **atomic upsert** lets the database serialize conflicting writers on the primary key `(user_id, ingredient_id)` instead of application-level read/modify/write.
@@ -146,6 +146,6 @@ For quantity *deduction* (not blind overwrite), clients should use `POST /recipe
 
 | Case | Endpoint | Phenomenon | Isolation / mechanism |
 |------|----------|------------|------------------------|
-| 1 | `POST /recipes/{id}/consume` | Lost update | `SERIALIZABLE` + `SELECT … FOR UPDATE` |
+| 1 | `POST /recipes/{id}/consume` | Lost update | `SERIALIZABLE` + `SELECT ... FOR UPDATE` |
 | 2 | `GET /households/{id}/shopping-list` | Non-repeatable read | `REPEATABLE READ` snapshot |
 | 3 | `POST /ingredients/save` | Lost update / write skew | Single-statement `ON CONFLICT DO UPDATE` in a transaction |
