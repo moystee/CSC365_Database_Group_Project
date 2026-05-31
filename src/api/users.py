@@ -307,47 +307,70 @@ def top_recipes(
             db.pantry.c.user_id.in_(housemates),
             db.pantry.c.is_shared_with_household.is_(True),
         )
-        available = my_pantry.union(shared_pantry).subquery("available")
-
-        allergens = select(db.user_allergies.c.ingredient_id).where(
-            db.user_allergies.c.user_id == user_id
-        )
-        recipes_with_allergens = (
-            select(db.recipe_ingredients.c.recipe_id)
-            .where(db.recipe_ingredients.c.ingredient_id.in_(allergens))
-            .distinct()
+        available_stmt = my_pantry.union(shared_pantry)
+        available_ids = list(
+            {
+                row.ingredient_id
+                for row in conn.execute(available_stmt)
+            }
         )
 
-        total_required = func.count(db.recipe_ingredients.c.ingredient_id)
-        have_required = func.count(db.recipe_ingredients.c.ingredient_id).filter(
-            db.recipe_ingredients.c.ingredient_id.in_(
-                select(available.c.ingredient_id)
+        allergen_recipe_ids = [
+            row.recipe_id
+            for row in conn.execute(
+                select(db.recipe_ingredients.c.recipe_id)
+                .where(
+                    db.recipe_ingredients.c.ingredient_id.in_(
+                        select(db.user_allergies.c.ingredient_id).where(
+                            db.user_allergies.c.user_id == user_id
+                        )
+                    )
+                )
+                .distinct()
             )
+        ]
+
+        # Pass 2: aggregate from recipe_ingredients only (650k rows), then join
+        # recipes for the top-N names — avoids hashing the full recipes table.
+        total_required = func.count(db.recipe_ingredients.c.ingredient_id)
+        have_required = func.count(db.recipe_ingredients.c.ingredient_id)
+        if available_ids:
+            have_required = have_required.filter(
+                db.recipe_ingredients.c.ingredient_id.in_(available_ids)
+            )
+
+        coverage = (
+            select(
+                db.recipe_ingredients.c.recipe_id,
+                total_required.label("total_count"),
+                have_required.label("have_count"),
+            )
+            .group_by(db.recipe_ingredients.c.recipe_id)
+            .having(total_required > 0)
         )
+        if allergen_recipe_ids:
+            coverage = coverage.where(
+                db.recipe_ingredients.c.recipe_id.not_in(allergen_recipe_ids)
+            )
+
+        coverage_sq = coverage.subquery("coverage")
 
         ranked = (
             select(
                 db.recipes.c.recipe_id,
                 db.recipes.c.recipe_name,
                 db.recipes.c.recipe_steps,
-                total_required.label("total_count"),
-                have_required.label("have_count"),
+                coverage_sq.c.total_count,
+                coverage_sq.c.have_count,
             )
             .select_from(
-                db.recipes.join(
-                    db.recipe_ingredients,
-                    db.recipes.c.recipe_id == db.recipe_ingredients.c.recipe_id,
+                coverage_sq.join(
+                    db.recipes,
+                    db.recipes.c.recipe_id == coverage_sq.c.recipe_id,
                 )
             )
-            .where(db.recipes.c.recipe_id.not_in(recipes_with_allergens))
-            .group_by(
-                db.recipes.c.recipe_id,
-                db.recipes.c.recipe_name,
-                db.recipes.c.recipe_steps,
-            )
-            .having(total_required > 0)
             .order_by(
-                have_required.desc(),
+                coverage_sq.c.have_count.desc(),
                 db.recipes.c.recipe_name,
             )
             .limit(limit)
@@ -358,7 +381,7 @@ def top_recipes(
             return []
 
         recipe_ids = [row.recipe_id for row in rows]
-        missing_rows = conn.execute(
+        missing_stmt = (
             select(
                 db.recipe_ingredients.c.recipe_id,
                 db.ingredients.c.ingredient_id,
@@ -371,13 +394,14 @@ def top_recipes(
                     == db.ingredients.c.ingredient_id,
                 )
             )
-            .where(
-                db.recipe_ingredients.c.recipe_id.in_(recipe_ids),
-                db.recipe_ingredients.c.ingredient_id.not_in(
-                    select(available.c.ingredient_id)
-                ),
+            .where(db.recipe_ingredients.c.recipe_id.in_(recipe_ids))
+        )
+        if available_ids:
+            missing_stmt = missing_stmt.where(
+                db.recipe_ingredients.c.ingredient_id.not_in(available_ids)
             )
-            .order_by(
+        missing_rows = conn.execute(
+            missing_stmt.order_by(
                 db.recipe_ingredients.c.recipe_id, db.ingredients.c.name
             )
         ).all()

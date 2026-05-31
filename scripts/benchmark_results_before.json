@@ -1,0 +1,74 @@
+[
+  {
+    "method": "GET",
+    "path": "/",
+    "status": 200,
+    "median_ms": 1.0
+  },
+  {
+    "method": "GET",
+    "path": "/users/50000",
+    "status": 200,
+    "median_ms": 1.0
+  },
+  {
+    "method": "GET",
+    "path": "/users/50000/allergies",
+    "status": 200,
+    "median_ms": 1.5
+  },
+  {
+    "method": "GET",
+    "path": "/users/50000/top-recipes",
+    "status": 200,
+    "median_ms": 181.9
+  },
+  {
+    "method": "GET",
+    "path": "/pantry/get_ingredients",
+    "status": 200,
+    "median_ms": 16.6
+  },
+  {
+    "method": "GET",
+    "path": "/ingredients",
+    "status": 200,
+    "median_ms": 12.8
+  },
+  {
+    "method": "GET",
+    "path": "/recipes",
+    "status": 200,
+    "median_ms": 1.1
+  },
+  {
+    "method": "GET",
+    "path": "/recipes/get_compatible",
+    "status": 200,
+    "median_ms": 81.7
+  },
+  {
+    "method": "GET",
+    "path": "/households/25000/shopping-list",
+    "status": 200,
+    "median_ms": 2.6
+  },
+  {
+    "method": "POST",
+    "path": "/users/add_allergy",
+    "status": 200,
+    "median_ms": 1.2
+  },
+  {
+    "method": "POST",
+    "path": "/ingredients/save",
+    "status": 200,
+    "median_ms": 1.4
+  },
+  {
+    "method": "POST",
+    "path": "/recipes/40000/consume",
+    "status": 409,
+    "median_ms": 1.5
+  }
+]

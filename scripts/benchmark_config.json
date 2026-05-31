@@ -1,0 +1,11 @@
+{
+  "user_id": 50000,
+  "household_id": 25000,
+  "recipe_id": 40000,
+  "ingredient_ids": [
+    1,
+    2,
+    3
+  ],
+  "allergen_ingredient_id": 42
+}
