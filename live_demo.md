@@ -228,8 +228,6 @@ curl -s "$BASE/recipes/get_compatible?ingredient_ids=7&ingredient_ids=8&user_id=
 
 ## V4 “hard” endpoints (complex reads)
 
-Also run via `python scripts/run_live_demo_flows.py` after Flows 1–3 (same `BASE_URI`).
-
 Run **after Flow 1 and/or Flow 2** so users have pantry + (for shopping-list) household data.
 
 ### `GET /users/{user_id}/top-recipes`
@@ -248,7 +246,7 @@ curl -s "$BASE/users/$SARAH/top-recipes?limit=5"
 curl -s "$BASE/users/$MARK/top-recipes?limit=5"
 ```
 
-**Talking point:** excludes allergen recipes; includes shared household pantry when user is in a household.
+**Important:** excludes allergen recipes; includes shared household pantry when user is in a household.
 
 ### `GET /households/{household_id}/shopping-list`
 
@@ -304,9 +302,7 @@ Read `detail` in the JSON — e.g. `Missing pantry item: chicken …` or `Insuff
 
 ---
 
-## Edge cases (demo these on purpose)
-
-Automated run: `python scripts/run_live_edge_cases.py` (set `BASE_URI` in that file; creates its own fixture users).
+## Edge cases (demo on purpose)
 
 ### 404 — not found
 
