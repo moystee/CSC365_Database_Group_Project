@@ -2,34 +2,12 @@
 
 **Base URL:** `https://foodgraph-api.onrender.com`  
 **Interactive docs:** https://foodgraph-api.onrender.com/docs  
-**Database:** Supabase Postgres (schema via `alembic upgrade head`; **no** 1M-row perf seed on hosted DB)
-
-Copy-paste helpers (run in terminal):
-
-```bash
-BASE=https://foodgraph-api.onrender.com
-# Unique email per demo run (avoids 409 duplicate signup)
-TS=$(date +%s)
-```
-
-**Before you present:** wake the service (cold start ~30–60s):
-
-```bash
-curl -s "$BASE/" | python3 -m json.tool
-# Expect: "database": "ok", "version": "0.4.0"
-```
-
-Optional pretty-print for any command below:
-
-```bash
-# append to curl:  | python3 -m json.tool
-```
 
 ---
 
 ## Seeded catalog (always present after migrations)
 
-Migrations seed **ingredients** and **recipes** only. **Users and households are created by your demo** (IDs depend on what already exists in Supabase).
+Migrations seed **ingredients** and **recipes** only. **Users and households are created manually**.
 
 | ingredient_id | name |
 |---------------|------|
@@ -55,14 +33,6 @@ Migrations seed **ingredients** and **recipes** only. **Users and households are
 | 6 | Eggs and Spinach Scramble | 9, 10 |
 
 **User IDs on a fresh Supabase DB:** first signup is usually `user_id: 1`, second `2`, etc. If the DB already has users, capture IDs from each `POST /users/create` response and export them:
-
-```bash
-export SARAH=1   # replace with actual user_id from JSON
-export MARK=2
-export LEO=3
-export DAVID=4
-export HH=1      # household_id from POST /households/create
-```
 
 ---
 
